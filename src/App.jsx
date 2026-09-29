@@ -44,6 +44,7 @@ const EMPRESA = {
   whatsapp: "11954553032",
   endereco: "Rua Tomás Francisco Pires, 238",
 };
+const linkMapa = () => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(EMPRESA.endereco + " Mimi Dog's Pet Shop")}`;
 
 // =====================================================================
 //  UTILITÁRIOS
@@ -357,6 +358,13 @@ const ICONES = {
   cake: ["M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8", "M4 16s1.5-1 4-1 4 2 6 2 4-1 4-1", "M2 21h20", "M7 8v3", "M12 8v3", "M17 8v3"],
   map: ["M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z", "M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6"],
   clock: ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20", "M12 6v6l4 2"],
+  banho: ["M4 12h16", "M5 12a7 7 0 0 1 14 0", "M12 5V3", "M8 16v1", "M12 16v2", "M16 16v1", "M10 20v1", "M14 20v1"],
+  tesoura: ["M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6", "M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6", "M20 4 8.1 15.9", "M14.5 14.5 20 20", "M8.1 8.1 12 12"],
+  brilho: ["M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z", "M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"],
+  dente: ["M7 3c-2.5 0-4 2-4 4.5 0 3 1.5 4.5 2 7 .5 3 1 6.5 3 6.5s2-4 4-4 2 4 4 4 2.5-3.5 3-6.5c.5-2.5 2-4 2-7C21 5 19.5 3 17 3c-2 0-3 1-5 1S9 3 7 3z"],
+  pente: ["M4 9h16v4H4z", "M6 13v6", "M9 13v6", "M12 13v6", "M15 13v6", "M18 13v6"],
+  check: ["M20 6 9 17l-5-5"],
+  globo: ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20", "M2 12h20", "M12 2a15 15 0 0 1 0 20", "M12 2a15 15 0 0 0 0 20"],
   heart: ["M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"],
 };
 function Icone({ nome, tam = 20, className = "" }) {
@@ -671,6 +679,7 @@ function TelaLogin() {
         {erro && <div className="alerta alerta-erro">{erro}</div>}
         {aviso && <div className="alerta alerta-info">{aviso}</div>}
         <button className="btn btn-ouro btn-cheio" disabled={ocupado}>{ocupado ? "Entrando…" : "Entrar"}</button>
+        <a href="#/" className="link login-site">← Voltar para o site</a>
         {MODO_DEMO && (
           <div className="demo-caixa">
             <strong>Modo de teste</strong> — os dados ficam só neste navegador. Use:
@@ -713,8 +722,10 @@ function GraficoBarras({ dados }) {
   );
 }
 
-function calcularAlertas(clientes, pets) {
+function calcularAlertas(clientes, pets, pedidos = []) {
   const alertas = [];
+  const novos = pedidos.filter((p) => p.status === "novo").length;
+  if (novos) alertas.push({ tipo: "site", texto: `${novos} pedido${novos > 1 ? "s" : ""} de agendamento pelo site esperando resposta` });
   const mesAtual = String(new Date().getMonth() + 1).padStart(2, "0");
   const hojeMD = hojeISO().slice(5);
   pets.forEach((p) => {
@@ -736,14 +747,14 @@ function calcularAlertas(clientes, pets) {
   return alertas;
 }
 
-function Dashboard({ usuario, clientes, pets, irPara, abrirPet }) {
+function Dashboard({ usuario, clientes, pets, pedidos, irPara, abrirPet, painelPedidos }) {
   const mimi = useMimi();
   const falou = useRef(false);
   const alertasRef = useRef([]);
   const mesAtual = hojeISO().slice(0, 7);
   const novosClientesMes = clientes.filter((c) => mesDe(c.criadoEm) === mesAtual).length;
   const novosPetsMes = pets.filter((p) => mesDe(p.criadoEm) === mesAtual).length;
-  const alertas = useMemo(() => calcularAlertas(clientes, pets), [clientes, pets]);
+  const alertas = useMemo(() => calcularAlertas(clientes, pets, pedidos), [clientes, pets, pedidos]);
 
   const serie = useMemo(() => {
     const d = new Date();
@@ -820,6 +831,7 @@ function Dashboard({ usuario, clientes, pets, irPara, abrirPet }) {
       </section>
 
       <div className="grade-painel">
+        {painelPedidos}
         <section className="painel painel-agenda">
           <div className="painel-topo"><h2>Agenda de hoje</h2><Icone nome="calendar" /></div>
           <div className="agenda-embreve">
@@ -1461,6 +1473,7 @@ function Sistema({ usuario }) {
   const [menuMovel, setMenuMovel] = useState(false);
   const [fabAberto, setFabAberto] = useState(false);
   const [toast, setToast] = useState(null);
+  const [pedidos, setPedidos] = useState([]);
   const mimi = useMimi();
 
   const permitidos = modulosDoUsuario(usuario);
@@ -1471,7 +1484,8 @@ function Sistema({ usuario }) {
     const u1 = db.ouvir("clientes", setClientes);
     const u2 = db.ouvir("pets", setPets);
     const u3 = db.ouvir("historico", setHistorico);
-    return () => { u1(); u2(); u3(); };
+    const u4 = db.ouvir("pedidos_site", setPedidos);
+    return () => { u1(); u2(); u3(); u4(); };
   }, []);
 
   const avisar = useCallback((texto, tipo = "ok") => {
@@ -1488,7 +1502,11 @@ function Sistema({ usuario }) {
   const abrirPet = (id) => setPetAberto(id);
 
   // ---- Salvar / excluir ----
-  const salvarCliente = async (dados) => {
+  const salvarCliente = async (dadosForm) => {
+    const { _pedidoId, ...dados } = dadosForm;
+    if (_pedidoId) {
+      try { await db.atualizar("pedidos_site", _pedidoId, { clienteCadastrado: true }); } catch (e) { console.error(e); }
+    }
     if (dados.id) {
       const { id, ...resto } = dados;
       await db.atualizar("clientes", id, resto);
@@ -1567,7 +1585,19 @@ function Sistema({ usuario }) {
   let conteudo;
   if (!pode(pagina)) conteudo = <EmBreve modulo={{ ...moduloAtual, etapa: "—" }} />;
   else if (moduloAtual?.etapa) conteudo = <EmBreve modulo={moduloAtual} />;
-  else if (pagina === "dashboard") conteudo = <Dashboard usuario={usuario} clientes={clientes} pets={pets} irPara={irPara} abrirPet={abrirPet} />;
+  else if (pagina === "dashboard") conteudo = (
+    <Dashboard usuario={usuario} clientes={clientes} pets={pets} pedidos={pode("clientes") ? pedidos : []} irPara={irPara} abrirPet={abrirPet}
+      painelPedidos={pode("clientes") ? (
+        <PainelPedidos pedidos={pedidos} clientes={clientes}
+          mudarStatus={async (pd, status) => {
+            await db.atualizar("pedidos_site", pd.id, { status });
+            await registrarHistorico(usuario, "site", `Pedido do site de ${pd.nome} marcado como ${status}`);
+            avisar(status === "confirmado" ? "Pedido confirmado" : "Pedido arquivado");
+            if (status === "confirmado") mimi.comemorar(`Oba! ${pd.pet || "O pet"} vem nos visitar! 🛁`);
+          }}
+          cadastrar={(pd) => setFormCliente({ nome: pd.nome, whatsapp: pd.whatsapp, origem: "Site", observacoes: pd.observacoes || "", _pedidoId: pd.id })} />
+      ) : null} />
+  );
   else if (pagina === "clientes" && clienteSel) conteudo = (
     <DetalheCliente cliente={clienteSel} pets={pets} historico={historico} voltar={() => setClienteAberto(null)}
       editar={() => setFormCliente(clienteSel)} excluir={() => pedirExclusaoCliente(clienteSel)}
@@ -1607,6 +1637,9 @@ function Sistema({ usuario }) {
             </button>
           ))}
         </nav>
+        <a className="menu-item menu-site" href="#/" target="_blank" rel="noreferrer">
+          <Icone nome="globo" tam={20} /><span>Ver o site</span>
+        </a>
         <div className="menu-usuario">
           <div className="menu-avatar">{primeiroNome(usuario.nome).slice(0, 1).toUpperCase()}</div>
           <div className="menu-usuario-info">
@@ -1656,7 +1689,7 @@ function Sistema({ usuario }) {
       )}
       {fabAberto && <div className="fab-fundo" onClick={() => setFabAberto(false)} />}
 
-      {formCliente && <FormCliente inicial={formCliente.id ? formCliente : null} aoFechar={() => setFormCliente(null)} aoSalvar={salvarCliente} />}
+      {formCliente && <FormCliente inicial={formCliente} aoFechar={() => setFormCliente(null)} aoSalvar={salvarCliente} />}
       {formPet && <FormPet inicial={formPet} clientes={clientes} aoFechar={() => setFormPet(null)} aoSalvar={salvarPet} />}
       {petSel && !formPet && (
         <FichaPet pet={petSel} cliente={clientes.find((c) => c.id === petSel.clienteId)} historico={historico}
@@ -1670,6 +1703,279 @@ function Sistema({ usuario }) {
 }
 
 // =====================================================================
+//  PEDIDOS DE AGENDAMENTO QUE CHEGAM PELO SITE (painel do sistema)
+// =====================================================================
+function PainelPedidos({ pedidos, clientes, mudarStatus, cadastrar }) {
+  const hoje = hojeISO();
+  const lista = pedidos
+    .filter((p) => p.status === "novo" || (p.status === "confirmado" && (p.data || "") >= hoje))
+    .sort((a, b) => (a.status === b.status ? `${a.data}${a.horario}`.localeCompare(`${b.data}${b.horario}`) : a.status === "novo" ? -1 : 1));
+  const whatsDe = new Set(clientes.map((c) => soDigitos(c.whatsapp || c.telefone)).filter(Boolean));
+  return (
+    <section className="painel painel-pedidos">
+      <div className="painel-topo">
+        <h2>Pedidos pelo site</h2>
+        <Icone nome="globo" />
+      </div>
+      {lista.length === 0 ? (
+        <p className="texto-suave">Nenhum pedido novo. Quando alguém pedir horário pelo site, aparece aqui na hora.</p>
+      ) : (
+        <ul className="pedidos">
+          {lista.map((p) => {
+            const jaCliente = p.clienteCadastrado || whatsDe.has(soDigitos(p.whatsapp));
+            const msg = `Olá, ${primeiroNome(p.nome)}! Aqui é do ${EMPRESA.nome} 🐶\nRecebemos seu pedido de ${(p.servicos || []).join(", ")} para o(a) ${p.pet} no dia ${fmtData(p.data)} às ${p.horario}. Podemos confirmar?`;
+            return (
+              <li key={p.id} className={`pedido pedido-${p.status}`}>
+                <div className="pedido-info">
+                  <div className="pedido-linha1">
+                    <strong>{p.nome}</strong>
+                    <span className={`chip ${p.status === "novo" ? "chip-ouro" : ""}`}>{p.status === "novo" ? "novo" : "confirmado"}</span>
+                  </div>
+                  <span>🐾 {p.pet}{p.especie ? ` (${p.especie}${p.porte ? ", " + p.porte.toLowerCase() : ""})` : ""} · {(p.servicos || []).join(", ")}</span>
+                  <span className="texto-suave peq">📅 {fmtData(p.data)} às {p.horario} · {fmtTel(p.whatsapp)}</span>
+                  {p.observacoes && <span className="texto-suave peq">“{p.observacoes}”</span>}
+                </div>
+                <div className="pedido-acoes">
+                  <a className="btn btn-whats btn-peq" href={linkWhats(p.whatsapp, msg)} target="_blank" rel="noreferrer"><Icone nome="whats" tam={15} /> WhatsApp</a>
+                  {p.status === "novo" && <button className="btn btn-ouro btn-peq" onClick={() => mudarStatus(p, "confirmado")}><Icone nome="check" tam={15} /> Confirmar</button>}
+                  {!jaCliente && <button className="btn btn-leve btn-peq" onClick={() => cadastrar(p)}><Icone nome="plus" tam={15} /> Cadastrar cliente</button>}
+                  <button className="btn-icone" title="Arquivar pedido" aria-label="Arquivar pedido" onClick={() => mudarStatus(p, "arquivado")}><Icone nome="x" tam={16} /></button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="texto-suave peq pedidos-nota">Quando a Agenda (etapa 2) ficar pronta, o pedido confirmado vira um agendamento de verdade.</p>
+    </section>
+  );
+}
+
+// =====================================================================
+//  SITE PÚBLICO
+// =====================================================================
+const SERVICOS_SITE = [
+  { nome: "Banho", icone: "banho", texto: "Cuidado e higiene que seu pet precisa, com carinho do começo ao fim." },
+  { nome: "Tosa", icone: "tesoura", texto: "Estilo e conforto para o seu amigo ficar lindo e à vontade." },
+  { nome: "Hidratação", icone: "brilho", texto: "Pelos macios, brilhantes e saudáveis." },
+  { nome: "Escovação de dentes", icone: "dente", texto: "Saúde bucal em dia para um sorriso feliz." },
+  { nome: "Escovação", icone: "pente", texto: "Pelos desembaraçados e sem nós, com toda a calma." },
+  { nome: "Tosa higiênica", icone: "tesoura", texto: "Higiene nas áreas sensíveis para mais conforto no dia a dia." },
+];
+const HORARIOS_SITE = (() => {
+  const l = [];
+  for (let h = 8; h <= 18; h++) { l.push(`${String(h).padStart(2, "0")}:00`); if (h < 18) l.push(`${String(h).padStart(2, "0")}:30`); }
+  return l;
+})();
+
+function AgendarSite({ aoFechar, servicoInicial }) {
+  const mimi = useMimi();
+  const [f, setF] = useState({ nome: "", whatsapp: "", pet: "", especie: "Cão", porte: "Pequeno", servicos: servicoInicial ? [servicoInicial] : [], data: "", horario: "", observacoes: "" });
+  const [erro, setErro] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const [enviado, setEnviado] = useState(null);
+  const mudar = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const alternarServico = (n) => setF((x) => ({ ...x, servicos: x.servicos.includes(n) ? x.servicos.filter((s) => s !== n) : [...x.servicos, n] }));
+
+  const enviar = async () => {
+    if (!f.nome.trim()) return setErro("Conta pra gente o seu nome 😊");
+    if (soDigitos(f.whatsapp).length < 10) return setErro("Informe um WhatsApp com DDD.");
+    if (!f.pet.trim()) return setErro("Qual é o nome do seu pet?");
+    if (!f.servicos.length) return setErro("Escolha pelo menos um serviço.");
+    if (!f.data) return setErro("Escolha o dia.");
+    if (f.data < hojeISO()) return setErro("Escolha um dia a partir de hoje.");
+    if (!f.horario) return setErro("Escolha o horário.");
+    setErro(""); setOcupado(true);
+    let salvo = false;
+    try {
+      const gravacao = db.adicionar("pedidos_site", { ...f, nome: f.nome.trim(), pet: f.pet.trim(), whatsapp: fmtTel(f.whatsapp), status: "novo", origem: "site" });
+      const limite = new Promise((_, rej) => setTimeout(() => rej(new Error("tempo esgotado")), 8000));
+      await Promise.race([gravacao, limite]);
+      salvo = true;
+    } catch (e) { console.error("Não foi possível salvar o pedido", e); }
+    const msg = `Olá! Gostaria de agendar no ${EMPRESA.nome} 🐶\nNome: ${f.nome.trim()}\nPet: ${f.pet.trim()} (${f.especie}, porte ${f.porte.toLowerCase()})\nServiço: ${f.servicos.join(", ")}\nData: ${fmtData(f.data)} às ${f.horario}${f.observacoes ? `\nObs.: ${f.observacoes}` : ""}`;
+    setEnviado({ salvo, msg });
+    setOcupado(false);
+    mimi.comemorar(`Oba! Já tô esperando o ${f.pet.trim()} com muito carinho! 🛁`);
+  };
+
+  if (enviado) {
+    return (
+      <Modal titulo="Pedido recebido!" aoFechar={aoFechar}
+        rodape={<button className="btn btn-leve" onClick={aoFechar}>Fechar</button>}>
+        <div className="site-sucesso">
+          <div className="site-sucesso-mimi"><MimiDesenho modo="feliz" /></div>
+          {enviado.salvo ? (
+            <p>Recebemos seu pedido. Vamos te chamar no WhatsApp para <b>confirmar o horário</b>. Se quiser agilizar, envie também por lá:</p>
+          ) : (
+            <p>Para concluir, <b>envie seu pedido pelo WhatsApp</b> que a gente confirma o horário rapidinho:</p>
+          )}
+          <a className="btn btn-whats btn-cheio" href={linkWhats(EMPRESA.whatsapp, enviado.msg)} target="_blank" rel="noreferrer">
+            <Icone nome="whats" tam={18} /> Enviar pelo WhatsApp
+          </a>
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal titulo="Agende seu horário" aoFechar={aoFechar} largo
+      rodape={<>
+        {erro && <span className="erro-rodape">{erro}</span>}
+        <button className="btn btn-leve" onClick={aoFechar}>Cancelar</button>
+        <button className="btn btn-ouro" onClick={enviar} disabled={ocupado}>{ocupado ? "Enviando…" : "Confirmar pedido"}</button>
+      </>}>
+      <div className="fgrade">
+        <Campo rotulo="Seu nome *"><input value={f.nome} onChange={mudar("nome")} autoComplete="name" /></Campo>
+        <Campo rotulo="WhatsApp *"><input value={f.whatsapp} onChange={mudar("whatsapp")} onBlur={() => setF((x) => ({ ...x, whatsapp: fmtTel(x.whatsapp) }))} inputMode="tel" autoComplete="tel" placeholder="(11) 90000-0000" /></Campo>
+        <Campo rotulo="Nome do pet *"><input value={f.pet} onChange={mudar("pet")} /></Campo>
+        <Campo rotulo="Espécie"><select value={f.especie} onChange={mudar("especie")}>{ESPECIES.map((o) => <option key={o}>{o}</option>)}</select></Campo>
+        <Campo rotulo="Porte"><select value={f.porte} onChange={mudar("porte")}>{PORTES.map((o) => <option key={o}>{o}</option>)}</select></Campo>
+      </div>
+      <h3 className="form-secao">Serviços *</h3>
+      <div className="site-escolhas">
+        {SERVICOS_SITE.map((s) => (
+          <button type="button" key={s.nome} className={`site-escolha ${f.servicos.includes(s.nome) ? "marcado" : ""}`} onClick={() => alternarServico(s.nome)} aria-pressed={f.servicos.includes(s.nome)}>
+            <Icone nome={s.icone} tam={18} />{s.nome}
+          </button>
+        ))}
+      </div>
+      <h3 className="form-secao">Quando?</h3>
+      <div className="fgrade">
+        <Campo rotulo="Dia *"><input type="date" value={f.data} min={hojeISO()} onChange={mudar("data")} /></Campo>
+        <Campo rotulo="Horário *">
+          <select value={f.horario} onChange={mudar("horario")}>
+            <option value="">Escolha…</option>{HORARIOS_SITE.map((h) => <option key={h}>{h}</option>)}
+          </select>
+        </Campo>
+      </div>
+      <Campo rotulo="Algo que a gente precise saber?" largo><textarea rows={2} value={f.observacoes} onChange={mudar("observacoes")} placeholder="Ex.: tem alergia, fica nervoso com secador…" /></Campo>
+      <p className="texto-suave peq">O horário é confirmado pela nossa equipe pelo WhatsApp.</p>
+    </Modal>
+  );
+}
+
+function Site() {
+  const [agendar, setAgendar] = useState(null);
+  const irPara = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const abrirAgenda = (servico) => setAgendar({ servico: servico || "" });
+  const msgWhats = `Olá! Vim pelo site do ${EMPRESA.nome} 🐶`;
+
+  return (
+    <div className="site">
+      <header className="site-topo">
+        <button className="site-marca" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+          <img src={LOGO} alt="" />
+          <span><strong>Mimi Dog's</strong><em>Pet Shop</em></span>
+        </button>
+        <nav className="site-nav">
+          <button onClick={() => irPara("servicos")}>Serviços</button>
+          <button onClick={() => irPara("sobre")}>Sobre</button>
+          <button onClick={() => irPara("contato")}>Contato</button>
+        </nav>
+        <button className="btn btn-ouro" onClick={() => abrirAgenda()}>Agendar horário</button>
+      </header>
+
+      <section className="site-hero">
+        <div className="site-bolhas" aria-hidden="true"><i /><i /><i /><i /><i /></div>
+        <div className="site-hero-texto">
+          <span className="site-selo">Agenda da semana aberta!</span>
+          <h1>Cuidado e carinho que seu dog merece</h1>
+          <p>Banho, tosa, hidratação e escovação com muito amor. Aqui seu pet sai sempre limpo, cheiroso e feliz.</p>
+          <div className="site-hero-acoes">
+            <button className="btn btn-ouro btn-grande" onClick={() => abrirAgenda()}><Icone nome="calendar" tam={20} /> Agende seu horário</button>
+            <a className="btn btn-contorno btn-grande" href={linkWhats(EMPRESA.whatsapp, msgWhats)} target="_blank" rel="noreferrer"><Icone nome="whats" tam={20} /> {fmtTel(EMPRESA.whatsapp)}</a>
+          </div>
+        </div>
+        <div className="site-hero-logo"><img src={LOGO} alt="Logo Mimi Dog's Pet Shop" /></div>
+        <svg className="site-onda" viewBox="0 0 1440 80" preserveAspectRatio="none" aria-hidden="true"><path d="M0 40c240 40 480 40 720 20s480-50 720-10v30H0z" fill="var(--ceu)" /></svg>
+      </section>
+
+      <section className="site-secao" id="servicos">
+        <h2 className="site-titulo">Nossos serviços</h2>
+        <p className="site-sub">Toque em um serviço para já pedir o seu horário.</p>
+        <div className="site-servicos">
+          {SERVICOS_SITE.map((s) => (
+            <button key={s.nome} className="site-servico" onClick={() => abrirAgenda(s.nome)}>
+              <span className="site-servico-icone"><Icone nome={s.icone} tam={30} /></span>
+              <strong>{s.nome}</strong>
+              <span>{s.texto}</span>
+              <em>Agendar <Icone nome="back" tam={14} className="seta" /></em>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="site-faixa">
+        <p>Agende já e dê ao seu pet o melhor cuidado!</p>
+        <button className="btn btn-marinho btn-grande" onClick={() => abrirAgenda()}>Quero agendar</button>
+      </section>
+
+      <section className="site-secao site-sobre" id="sobre">
+        <div className="site-sobre-texto">
+          <h2 className="site-titulo">Aqui ele é tratado com muito amor</h2>
+          <p>No Mimi Dog's cada pet é recebido pelo nome, com calma e carinho. A gente conhece as manias, os medos e as alergias de cada um, porque tudo fica anotado na ficha dele.</p>
+          <ul className="site-diferenciais">
+            <li><span><Icone nome="heart" tam={20} /></span><div><strong>Atendimento com amor</strong>Seu pet é tratado como parte da família.</div></li>
+            <li><span><Icone nome="paw" tam={20} /></span><div><strong>Ficha de cada pet</strong>Alergias e cuidados especiais sempre à mão da equipe.</div></li>
+            <li><span><Icone nome="whats" tam={20} /></span><div><strong>Tudo pelo WhatsApp</strong>Confirmação do horário e avisos direto no seu celular.</div></li>
+          </ul>
+        </div>
+        <div className="site-passos">
+          <h3>Como funciona</h3>
+          <ol>
+            <li><span><b>Escolha</b> o serviço, o dia e o horário aqui no site.</span></li>
+            <li><span><b>A gente confirma</b> pelo WhatsApp.</span></li>
+            <li><span><b>Traga seu pet</b> e deixe o resto com a gente.</span></li>
+          </ol>
+          <button className="btn btn-ouro btn-cheio" onClick={() => abrirAgenda()}>Começar agendamento</button>
+        </div>
+      </section>
+
+      <section className="site-secao" id="contato">
+        <h2 className="site-titulo">Venha nos visitar</h2>
+        <div className="site-contatos">
+          <a className="site-contato" href={linkWhats(EMPRESA.whatsapp, msgWhats)} target="_blank" rel="noreferrer">
+            <span className="site-contato-icone"><Icone nome="whats" tam={26} /></span>
+            <div><em>Agende já!</em><strong>{fmtTel(EMPRESA.whatsapp)}</strong></div>
+          </a>
+          <a className="site-contato" href={linkMapa()} target="_blank" rel="noreferrer">
+            <span className="site-contato-icone"><Icone nome="map" tam={26} /></span>
+            <div><em>Localização</em><strong>{EMPRESA.endereco}</strong></div>
+          </a>
+          <div className="site-contato">
+            <span className="site-contato-icone"><Icone nome="heart" tam={26} /></span>
+            <div><em>Atendimento</em><strong>com muito amor</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="site-rodape">
+        <img src={LOGO} alt="" />
+        <p className="site-obrigado">Obrigado pela confiança! 💙</p>
+        <p className="site-rodape-info">{EMPRESA.nome} · {EMPRESA.endereco} · {fmtTel(EMPRESA.whatsapp)}</p>
+        <a href="#/sistema" className="site-area">Área do pet shop</a>
+      </footer>
+
+      <a className="site-whats-flutuante" href={linkWhats(EMPRESA.whatsapp, msgWhats)} target="_blank" rel="noreferrer" aria-label="Falar no WhatsApp">
+        <Icone nome="whats" tam={28} />
+      </a>
+
+      {agendar && <AgendarSite servicoInicial={agendar.servico} aoFechar={() => setAgendar(null)} />}
+    </div>
+  );
+}
+
+const DICAS_SITE = () => [
+  "Oi! Eu sou a Mimi 🐶 Quer agendar um banho? É só tocar em “Agendar horário”!",
+  "Toque em qualquer serviço e eu já deixo ele marcadinho pra você 🛁",
+  "A confirmação do horário chega pelo WhatsApp, rapidinho 📱",
+  "Seu pet tem alergia? Conta pra gente no agendamento que a gente anota tudo 💙",
+  "Au au! Aqui todo mundo sai cheiroso e feliz ✨",
+];
+const lerRota = () => (window.location.hash.startsWith("#/sistema") ? "sistema" : "site");
+
+// =====================================================================
 //  APP
 // =====================================================================
 export default function App() {
@@ -1680,6 +1986,13 @@ export default function App() {
     return !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   });
   const dadosDicas = useRef({ clientes: 0, pets: 0 });
+  const [rota, setRota] = useState(lerRota);
+
+  useEffect(() => {
+    const aoMudar = () => { setRota(lerRota()); window.scrollTo({ top: 0 }); };
+    window.addEventListener("hashchange", aoMudar);
+    return () => window.removeEventListener("hashchange", aoMudar);
+  }, []);
 
   useEffect(() => {
     if (!document.getElementById("mimi-fontes")) {
@@ -1689,17 +2002,20 @@ export default function App() {
       l.href = "https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Figtree:wght@400;500;600;700&display=swap";
       document.head.appendChild(l);
     }
-    document.title = "Mimi Dog's Pet Shop";
     semearDemo();
     return autenticacao.observar(setUsuario);
   }, []);
 
   useEffect(() => {
-    if (!usuario) return undefined;
+    document.title = rota === "site" ? "Mimi Dog's Pet Shop · Banho e tosa com carinho" : "Mimi Dog's · Sistema";
+  }, [rota]);
+
+  useEffect(() => {
+    if (!usuario || rota !== "sistema") return undefined;
     const u1 = db.ouvir("clientes", (l) => { dadosDicas.current.clientes = l.length; });
     const u2 = db.ouvir("pets", (l) => { dadosDicas.current.pets = l.length; });
     return () => { u1(); u2(); };
-  }, [usuario]);
+  }, [usuario, rota]);
 
   const alternarMimi = () => {
     setMimiAtiva((x) => { localStorage.setItem("mimi_mascote", x ? "0" : "1"); return !x; });
@@ -1718,6 +2034,27 @@ export default function App() {
     ];
   }, []);
 
+  const botaoMimi = (
+    <button className={`mimi-alternar ${mimiAtiva ? "ligada" : ""}`} onClick={alternarMimi}
+      aria-label={mimiAtiva ? "Esconder a Mimi" : "Mostrar a Mimi"} title={mimiAtiva ? "Esconder a Mimi" : "Mostrar a Mimi"}>
+      <Icone nome="paw" tam={18} />
+    </button>
+  );
+
+  if (rota === "site") {
+    return (
+      <>
+        <style>{CSS}</style>
+        <div className="site-raiz">
+          <MimiProvider ativa={mimiAtiva} dicas={DICAS_SITE}>
+            <Site />
+            {botaoMimi}
+          </MimiProvider>
+        </div>
+      </>
+    );
+  }
+
   if (usuario === undefined) {
     return (<><style>{CSS}</style><div className="carregando"><img src={LOGO} alt="Carregando" /></div></>);
   }
@@ -1728,10 +2065,7 @@ export default function App() {
       {usuario ? (
         <MimiProvider ativa={mimiAtiva} dicas={dicas}>
           <Sistema usuario={usuario} />
-          <button className={`mimi-alternar ${mimiAtiva ? "ligada" : ""}`} onClick={alternarMimi}
-            aria-label={mimiAtiva ? "Esconder a Mimi" : "Mostrar a Mimi"} title={mimiAtiva ? "Esconder a Mimi" : "Mostrar a Mimi"}>
-            <Icone nome="paw" tam={18} />
-          </button>
+          {botaoMimi}
         </MimiProvider>
       ) : (
         <TelaLogin />
@@ -1898,6 +2232,8 @@ button.numero:hover{transform:translateY(-2px)}
 .aviso-atraso{background:var(--vermelho-claro);color:#8E1C17}
 .aviso-atraso::before{content:"🔔"}
 .aviso-atencao::before{content:"⚠️"}
+.aviso-site{background:var(--ouro-claro)}
+.aviso-site::before{content:"🌐"}
 .link-aviso{text-align:left;font-weight:600;color:inherit}
 .link-aviso:hover{text-decoration:underline}
 .legenda{display:flex;gap:16px;font-size:13px;color:var(--suave);margin:-4px 0 6px}
@@ -2061,6 +2397,128 @@ button.numero:hover{transform:translateY(-2px)}
 .mimi-alternar{position:fixed;right:26px;bottom:88px;z-index:56;width:40px;height:40px;border-radius:50%;background:#fff;color:#9AAAC6;display:grid;place-items:center;box-shadow:var(--sombra)}
 .mimi-alternar.ligada{color:var(--ouro-2)}
 .login-mimi .mimi-svg{filter:drop-shadow(0 6px 10px rgba(0,0,0,.25))}
+
+
+/* ---------- pedidos do site (painel) ---------- */
+.painel-pedidos{grid-column:1/-1;border:2px solid var(--ouro)}
+.pedidos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.pedido{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;border-radius:14px;background:var(--ceu-2)}
+.pedido-novo{background:var(--ouro-claro)}
+.pedido-info{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 280px}
+.pedido-linha1{display:flex;align-items:center;gap:8px}
+.pedido-acoes{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.pedidos-nota{margin:12px 0 0}
+.menu-site{margin-top:6px;border:1px dashed rgba(255,255,255,.25);text-decoration:none}
+.login-site{align-self:center;font-size:14px}
+
+/* ---------- SITE ---------- */
+.site{background:var(--ceu);min-height:100vh}
+.site-topo{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:18px;padding:10px max(20px,calc((100vw - 1180px)/2));background:rgba(23,58,122,.97);backdrop-filter:blur(6px);box-shadow:0 4px 18px rgba(15,42,92,.2)}
+.site-marca{display:flex;align-items:center;gap:10px;color:#fff;text-align:left}
+.site-marca img{width:46px;height:46px;border-radius:50%;box-shadow:0 0 0 3px var(--ouro)}
+.site-marca strong{display:block;font-family:var(--fonte-titulo);font-size:21px;color:var(--ouro);line-height:1}
+.site-marca em{font-style:normal;font-size:12.5px;color:#B9CBEA}
+.site-nav{display:flex;gap:4px;margin-left:auto}
+.site-nav button{color:#D5E1F5;font-weight:600;padding:8px 12px;border-radius:999px}
+.site-nav button:hover{background:rgba(255,255,255,.1);color:#fff}
+.btn-grande{padding:14px 22px;font-size:16px}
+.btn-contorno{border-color:rgba(255,255,255,.55);color:#fff}
+.btn-contorno:hover{background:rgba(255,255,255,.1)}
+.btn-marinho{background:var(--marinho);color:#fff;box-shadow:0 3px 0 var(--marinho-2)}
+.site-hero{position:relative;overflow:hidden;background:var(--marinho);color:#fff;display:grid;grid-template-columns:1.2fr 1fr;align-items:center;gap:40px;padding:70px max(24px,calc((100vw - 1180px)/2)) 120px}
+.site-hero::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 78% 45%, rgba(246,194,48,.2), transparent 45%)}
+.site-hero-texto{position:relative;z-index:1}
+.site-selo{display:inline-block;background:var(--vermelho);color:#fff;font-family:var(--fonte-titulo);font-weight:800;font-size:17px;padding:4px 16px;border-radius:999px;transform:rotate(-2deg)}
+.site-hero h1{color:#fff;font-size:clamp(38px,5.6vw,66px);font-weight:800;line-height:1.02;margin:18px 0 16px;max-width:12ch}
+.site-hero p{font-size:19px;color:#D5E1F5;max-width:46ch;margin:0 0 28px}
+.site-hero-acoes{display:flex;gap:12px;flex-wrap:wrap}
+.site-hero-logo{position:relative;z-index:1;display:flex;justify-content:center}
+.site-hero-logo img{width:min(400px,100%);border-radius:50%;box-shadow:0 0 0 12px rgba(255,255,255,.07),0 0 0 24px rgba(255,255,255,.04),var(--sombra-forte);animation:flutuar 6s ease-in-out infinite}
+@keyframes flutuar{50%{transform:translateY(-10px) rotate(-1.5deg)}}
+.site-onda{position:absolute;left:0;right:0;bottom:-1px;width:100%;height:80px}
+.site-bolhas{position:absolute;inset:0;pointer-events:none}
+.site-bolhas i{position:absolute;border-radius:50%;border:2px solid rgba(255,255,255,.22);background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), transparent 60%)}
+.site-bolhas i:nth-child(1){width:46px;height:46px;left:6%;top:16%}
+.site-bolhas i:nth-child(2){width:24px;height:24px;left:44%;top:12%}
+.site-bolhas i:nth-child(3){width:60px;height:60px;right:4%;top:10%}
+.site-bolhas i:nth-child(4){width:30px;height:30px;left:50%;bottom:22%}
+.site-bolhas i:nth-child(5){width:18px;height:18px;right:12%;bottom:28%}
+.site-secao{padding:70px max(24px,calc((100vw - 1180px)/2))}
+.site-titulo{font-size:clamp(30px,4vw,44px);font-weight:800}
+.site-sub{color:var(--suave);font-size:17px;margin:6px 0 30px}
+.site-servicos{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.site-servico{background:#fff;border-radius:22px;padding:26px 24px 22px;text-align:left;display:flex;flex-direction:column;gap:6px;box-shadow:var(--sombra);transition:transform .18s, box-shadow .18s}
+.site-servico:hover{transform:translateY(-4px);box-shadow:var(--sombra-forte)}
+.site-servico-icone{width:62px;height:62px;border-radius:50%;background:var(--marinho);color:#fff;display:grid;place-items:center;margin-bottom:8px;box-shadow:0 0 0 5px var(--ceu-2)}
+.site-servico strong{font-family:var(--fonte-titulo);font-size:23px;color:var(--marinho);line-height:1.1}
+.site-servico > span:not(.site-servico-icone){color:var(--suave)}
+.site-servico em{margin-top:8px;font-style:normal;font-weight:700;color:var(--ouro-2);display:inline-flex;align-items:center;gap:4px}
+.site-servico .seta{transform:rotate(180deg)}
+.site-faixa{background:var(--ouro);display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap;padding:30px 24px;text-align:center}
+.site-faixa p{margin:0;font-family:var(--fonte-titulo);font-weight:800;font-size:clamp(22px,3vw,32px);color:var(--marinho-2);line-height:1.1}
+.site-sobre{display:grid;grid-template-columns:1.3fr 1fr;gap:40px;align-items:start}
+.site-sobre-texto > p{font-size:18px;color:var(--texto);max-width:56ch;margin:14px 0 24px}
+.site-diferenciais{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:16px}
+.site-diferenciais li{display:flex;gap:14px;align-items:flex-start}
+.site-diferenciais li > span{width:44px;height:44px;border-radius:14px;background:var(--ouro);color:var(--marinho-2);display:grid;place-items:center;flex-shrink:0}
+.site-diferenciais strong{display:block;font-family:var(--fonte-titulo);font-size:19px;color:var(--marinho);line-height:1.2}
+.site-diferenciais div{color:var(--suave)}
+.site-passos{background:#fff;border-radius:24px;padding:28px;box-shadow:var(--sombra);border:2px dashed #A9C3E6}
+.site-passos h3{font-size:24px;margin-bottom:12px}
+.site-passos ol{margin:0 0 22px;padding:0;list-style:none;counter-reset:passo;display:flex;flex-direction:column;gap:14px}
+.site-passos li{counter-increment:passo;display:flex;gap:12px;align-items:flex-start;font-size:16px}
+.site-passos li::before{content:counter(passo);width:30px;height:30px;border-radius:50%;background:var(--marinho);color:var(--ouro);font-family:var(--fonte-titulo);font-weight:800;display:grid;place-items:center;flex-shrink:0}
+.site-contatos{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:26px;background:var(--marinho);border-radius:28px;padding:10px;box-shadow:var(--sombra-forte)}
+.site-contato{display:flex;align-items:center;gap:14px;padding:18px 20px;color:#fff;text-decoration:none;border-radius:20px;transition:background .15s}
+a.site-contato:hover{background:rgba(255,255,255,.07)}
+.site-contato + .site-contato{border-left:1px solid rgba(255,255,255,.15)}
+.site-contato-icone{width:54px;height:54px;border-radius:50%;background:var(--ouro);color:var(--marinho-2);display:grid;place-items:center;flex-shrink:0}
+.site-contato em{display:block;font-style:normal;font-family:var(--fonte-titulo);font-weight:700;color:var(--ouro);font-size:16px;line-height:1.1}
+.site-contato strong{font-size:17px;line-height:1.25}
+.site-rodape{background:var(--marinho-2);color:#B9CBEA;text-align:center;padding:40px 20px 110px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.site-rodape img{width:70px;border-radius:50%;box-shadow:0 0 0 3px var(--ouro)}
+.site-obrigado{font-family:var(--fonte-titulo);font-size:26px;color:#fff;margin:8px 0 0}
+.site-rodape-info{margin:0;font-size:14px}
+.site-area{color:#7F97C4;font-size:13px;margin-top:10px}
+.site-whats-flutuante{position:fixed;right:22px;bottom:22px;z-index:70;width:60px;height:60px;border-radius:50%;background:#25D366;color:#fff;display:grid;place-items:center;box-shadow:0 8px 24px rgba(0,0,0,.25);transition:transform .15s}
+.site-whats-flutuante:hover{transform:scale(1.06)}
+.site-raiz .mimi{--mimi-x:16px;bottom:14px}
+.site-raiz .mimi-alternar{right:32px;bottom:94px}
+.site-escolhas{display:flex;flex-wrap:wrap;gap:8px}
+.site-escolha{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;border:1.5px solid var(--linha);background:#fff;font-weight:600;color:var(--marinho);transition:all .15s}
+.site-escolha.marcado{background:var(--marinho);border-color:var(--marinho);color:#fff}
+.site-sucesso{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding-bottom:6px}
+.site-sucesso-mimi{width:140px}
+.site-sucesso p{margin:0 0 6px;font-size:16px}
+@media (max-width:980px){
+  .site-servicos{grid-template-columns:1fr 1fr}
+  .site-sobre{grid-template-columns:1fr}
+  .site-contatos{grid-template-columns:1fr}
+  .site-contato + .site-contato{border-left:0;border-top:1px solid rgba(255,255,255,.15)}
+}
+@media (max-width:760px){
+  .site-nav{display:none}
+  .site-topo{justify-content:space-between;padding:8px 14px}
+  .site-topo .btn{padding:9px 14px;font-size:14px}
+  .site-marca img{width:40px;height:40px}
+  .site-marca strong{font-size:18px}
+  .site-hero{grid-template-columns:1fr;text-align:center;padding:36px 20px 100px;gap:24px}
+  .site-hero-logo{order:-1}
+  .site-hero-logo img{width:200px}
+  .site-hero h1{margin:14px auto 12px}
+  .site-hero p{margin:0 auto 24px;font-size:17px}
+  .site-hero-acoes{justify-content:center}
+  .site-hero-acoes .btn{flex:1 1 100%}
+  .site-secao{padding:50px 18px}
+  .site-servicos{grid-template-columns:1fr;gap:12px}
+  .site-servico{flex-direction:row;flex-wrap:wrap;align-items:center;column-gap:14px;padding:18px}
+  .site-servico-icone{margin:0;width:52px;height:52px}
+  .site-servico strong{flex:1}
+  .site-servico > span:not(.site-servico-icone){flex-basis:100%}
+  .site-servico em{margin-top:2px}
+  .site-raiz .mimi{bottom:12px;width:74px}
+  .site-raiz .mimi-alternar{right:28px;bottom:92px}
+}
 
 /* ---------- responsivo ---------- */
 @media (max-width:1100px){
