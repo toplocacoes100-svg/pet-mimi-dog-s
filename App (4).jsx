@@ -15,17 +15,17 @@ import {
 
 // =====================================================================
 //  CONFIGURAÇÃO DO FIREBASE
-//  Cole aqui os dados do seu projeto Firebase (Configurações do projeto
-//  > Seus apps > Configuração do SDK). Enquanto o apiKey começar com
-//  "COLE", o sistema funciona em MODO DE TESTE, salvando no navegador.
+//  Projeto: pet-mimi-dog. NÃO ALTERAR sem pedido do dono do sistema.
+//  (Se o apiKey começar com "COLE", o sistema entra em modo de teste.)
 // =====================================================================
 const firebaseConfig = {
-  apiKey: "COLE_AQUI_SUA_API_KEY",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
+  apiKey: "AIzaSyA1HZ48hJz0FNYACwKUpSMVPSYqMgCKYbo",
+  authDomain: "pet-mimi-dog.firebaseapp.com",
+  projectId: "pet-mimi-dog",
+  storageBucket: "pet-mimi-dog.firebasestorage.app",
+  messagingSenderId: "792114716112",
+  appId: "1:792114716112:web:283688e35d562ec36cedd5",
+  measurementId: "G-6HW1C3R9MP",
 };
 
 const MODO_DEMO = !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("COLE");
