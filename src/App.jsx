@@ -12,6 +12,7 @@ import {
   getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc,
   getDocs, query, limit, runTransaction,
 } from "firebase/firestore";
+import QRCode from "qrcode";
 
 // =====================================================================
 //  CONFIGURAÇÃO DO FIREBASE
@@ -965,7 +966,7 @@ const temServico = (a, palavra) => (a.servicos || []).some((s) => contem(s.nome,
 function varsMensagem({ config, cliente, pet, ag, extra = {} }) {
   return {
     empresa: config.nome, cliente: primeiroNome(cliente?.nome) || "", pet: pet?.nome || "seu pet",
-    data: ag ? fmtData(ag.data) : "", horario: ag?.hora || "", servico: ag ? nomesServicos(ag) : "", ...extra,
+    data: ag ? fmtData(ag.data) : "", horario: ag?.hora || "", servico: ag ? nomesServicos(ag) : "", site: linkDoSite(config), ...extra,
   };
 }
 
@@ -2525,6 +2526,7 @@ const MODELOS_CAMPANHA = [
   { nome: "Semana do Banho 🐶🛁", texto: "🐶💙 O seu melhor amigo merece esse carinho!\n\nA agenda da semana do {empresa} está aberta!\n\n🛁 Banho\n✂️ Tosa\n✨ Hidratação\n🦷 Escovação dental\n\nAgende agora!" },
   { nome: "Saudade do pet", texto: "Olá, {cliente}! 🐾\nEstamos com saudade do(a) {pet} aqui no {empresa}! Que tal agendar um banho cheiroso esta semana?" },
   { nome: "Aniversariantes do mês", texto: "🎂 Este mês tem aniversário do(a) {pet}! Para comemorar, venha fazer um banho especial no {empresa}. Agende pelo WhatsApp!" },
+  { nome: "QR Code / site", texto: "🐶💙 Agora ficou mais fácil agendar no {empresa}!\nÉ só apontar a câmera para o QR Code da imagem ou acessar: {site}\n\nEscolha o serviço, o dia e o horário. A gente confirma pelo WhatsApp!" },
   { nome: "Horários livres", texto: "Olá, {cliente}! Abrimos novos horários para {data}. Garanta o do(a) {pet}! 🐶" },
 ];
 
@@ -2582,7 +2584,7 @@ function FormCampanha({ inicial, aoFechar, aoSalvar }) {
         <span className="campo-rotulo">Usar um modelo:</span>
         {MODELOS_CAMPANHA.map((md) => <button key={md.nome} type="button" className="chip chip-botao" onClick={() => setF((x) => ({ ...x, mensagem: md.texto, nome: x.nome || md.nome }))}>{md.nome}</button>)}
       </div>
-      <Campo rotulo="Mensagem *" largo dica="Palavras entre chaves são trocadas sozinhas: {cliente} {pet} {data} {horario} {servico} {empresa}">
+      <Campo rotulo="Mensagem *" largo dica="Palavras entre chaves são trocadas sozinhas: {cliente} {pet} {data} {horario} {servico} {empresa} {site}">
         <textarea rows={7} value={f.mensagem} onChange={m("mensagem")} />
       </Campo>
       <div className="img-campanha">
@@ -2598,7 +2600,20 @@ function EnviarCampanha({ campanha, clientes, pets, agendamentos, aoFechar, marc
   const config = useConfig();
   const lista = destinatarios(campanha, clientes, pets, agendamentos);
   const enviados = new Set(campanha.enviados || []);
-  const varsDe = (d) => ({ empresa: config.nome, cliente: primeiroNome(d?.cliente?.nome) || "", pet: d?.pet?.nome || "seu pet", data: fmtData(campanha.data), horario: campanha.horario || "", servico: "" });
+  const varsDe = (d) => ({ empresa: config.nome, cliente: primeiroNome(d?.cliente?.nome) || "", pet: d?.pet?.nome || "seu pet", data: fmtData(campanha.data), horario: campanha.horario || "", servico: "", site: linkDoSite(config) });
+  const [gerandoCartao, setGerandoCartao] = useState(false);
+  const cartaoQR = async () => {
+    setGerandoCartao(true);
+    try { await compartilharImagem(await gerarCartaoQR(config, campanha.nome), "divulgacao-mimi-dogs.png", textoGeral); } catch { /* ignora */ }
+    setGerandoCartao(false);
+  };
+  const botaoQR = (
+    <div className="qr-campanha">
+      <QRCodeMimi link={linkDoSite(config)} logo={logoDe(config)} tamanho={84} />
+      <div><strong>Cartão com QR Code</strong><span className="texto-suave peq">Imagem pronta com o QR Code do site e o logo no centro, para mandar junto com a mensagem ou postar.</span>
+        <button className="btn btn-leve btn-peq mt6" disabled={gerandoCartao} onClick={cartaoQR}><Icone nome="download" tam={15} /> {gerandoCartao ? "Gerando…" : "Baixar / compartilhar cartão"}</button></div>
+    </div>
+  );
   const textoGeral = montarMsg(campanha.mensagem, { ...varsDe(null), cliente: "", pet: "seu pet" }).replace(/Olá, !/g, "Olá!").replace(/, !/g, "!");
   const [copiado, setCopiado] = useState(false);
   const comEmail = lista.filter((d) => d.cliente.email);
@@ -2609,6 +2624,7 @@ function EnviarCampanha({ campanha, clientes, pets, agendamentos, aoFechar, marc
       rodape={<><button className="btn btn-leve" onClick={aoFechar}>Fechar</button><button className="btn btn-ouro" onClick={concluir}><Icone nome="check" tam={16} /> Marcar como enviada</button></>}>
       <p className="texto-suave">Público: <b>{PUBLICOS.find((p) => p.id === campanha.publico)?.nome}</b> · {lista.length} cliente{lista.length !== 1 ? "s" : ""}</p>
       {campanha.imagem && <div className="img-campanha"><img src={campanha.imagem} alt="" /><a className="btn btn-leve btn-peq" href={campanha.imagem} download={`${campanha.nome}.jpg`}><Icone nome="download" tam={15} /> Baixar imagem</a></div>}
+      {botaoQR}
 
       {campanha.canal === "WhatsApp" && (
         <>
@@ -2656,7 +2672,7 @@ function EnviarCampanha({ campanha, clientes, pets, agendamentos, aoFechar, marc
   );
 }
 
-function Marketing({ campanhas, clientes, pets, agendamentos, novaCampanha, editar, enviar, excluir, podeExcluir }) {
+function Marketing({ campanhas, clientes, pets, agendamentos, novaCampanha, editar, enviar, excluir, podeExcluir, avisar }) {
   const config = useConfig();
   const hoje = hojeISO();
   const aniversariantes = pets.filter((p) => p.nascimento && p.nascimento.slice(5) === hoje.slice(5));
@@ -2674,6 +2690,8 @@ function Marketing({ campanhas, clientes, pets, agendamentos, novaCampanha, edit
           <button key={n} className="canal" onClick={() => novaCampanha({ canal: n })}><span>{em}</span><strong>{n}</strong><em>Nova campanha</em></button>
         ))}
       </div>
+
+      <section className="painel mb16"><PainelQRCode compacto avisar={avisar} /></section>
 
       {(aniversariantes.length > 0 || retornos.length > 0) && (
         <section className="painel mb16">
@@ -2864,6 +2882,222 @@ function Relatorios({ clientes, pets, agendamentos, contasReceber, contasPagar, 
 }
 
 // =====================================================================
+//  QR CODE COM O LOGO NO CENTRO
+// =====================================================================
+const linkDoSite = (config) => (config && config.linkSite ? config.linkSite.trim() : `${window.location.origin}/`);
+
+function carregarImagem(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+function retanguloRedondo(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// Desenha o QR Code (com o logo no meio) num canvas, na posição pedida
+async function desenharQR(ctx, link, logoSrc, x, y, tam, cor = "#173A7A", fundo = "#FFFFFF") {
+  const qr = QRCode.create(link || "https://", { errorCorrectionLevel: "H" });
+  const n = qr.modules.size;
+  const margem = 3;
+  const cel = tam / (n + margem * 2);
+  ctx.fillStyle = fundo;
+  retanguloRedondo(ctx, x, y, tam, tam, tam * 0.06);
+  ctx.fill();
+  const x0 = x + margem * cel;
+  const y0 = y + margem * cel;
+  const olho = (r, c) => (r < 7 && c < 7) || (r < 7 && c >= n - 7) || (r >= n - 7 && c < 7);
+  const centro = n / 2;
+  const raioLogo = n * 0.13;
+  ctx.fillStyle = cor;
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (!qr.modules.get(r, c) || olho(r, c)) continue;
+      if (Math.hypot(r + 0.5 - centro, c + 0.5 - centro) < raioLogo + 1.2) continue;
+      retanguloRedondo(ctx, x0 + c * cel + cel * 0.04, y0 + r * cel + cel * 0.04, cel * 0.92, cel * 0.92, cel * 0.28);
+      ctx.fill();
+    }
+  }
+  // "olhos" arredondados nos cantos
+  [[0, 0], [0, n - 7], [n - 7, 0]].forEach(([r, c]) => {
+    const ox = x0 + c * cel, oy = y0 + r * cel;
+    ctx.fillStyle = cor; retanguloRedondo(ctx, ox, oy, cel * 7, cel * 7, cel * 2); ctx.fill();
+    ctx.fillStyle = fundo; retanguloRedondo(ctx, ox + cel, oy + cel, cel * 5, cel * 5, cel * 1.4); ctx.fill();
+    ctx.fillStyle = cor; retanguloRedondo(ctx, ox + cel * 2, oy + cel * 2, cel * 3, cel * 3, cel * 1); ctx.fill();
+  });
+  // logo no centro
+  const logo = await carregarImagem(logoSrc);
+  const cx = x0 + centro * cel, cy = y0 + centro * cel;
+  const rl = raioLogo * cel;
+  ctx.fillStyle = fundo;
+  ctx.beginPath(); ctx.arc(cx, cy, rl + cel * 0.9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#F6C230";
+  ctx.beginPath(); ctx.arc(cx, cy, rl + cel * 0.35, 0, Math.PI * 2); ctx.fill();
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, rl, 0, Math.PI * 2); ctx.clip();
+  ctx.drawImage(logo, cx - rl, cy - rl, rl * 2, rl * 2);
+  ctx.restore();
+}
+
+async function gerarQRPng(link, logoSrc, tam = 1024) {
+  const c = document.createElement("canvas");
+  c.width = tam; c.height = tam;
+  await desenharQR(c.getContext("2d"), link, logoSrc, 0, 0, tam);
+  return c.toDataURL("image/png");
+}
+
+function quebrarTexto(ctx, texto, larg) {
+  const palavras = String(texto).split(" ");
+  const linhas = [];
+  let atual = "";
+  palavras.forEach((p) => {
+    const t = atual ? `${atual} ${p}` : p;
+    if (ctx.measureText(t).width > larg && atual) { linhas.push(atual); atual = p; } else atual = t;
+  });
+  if (atual) linhas.push(atual);
+  return linhas;
+}
+
+// Cartão pronto para divulgar (formato de post: 1080 x 1350)
+async function gerarCartaoQR(config, titulo = "Agende o banho do seu pet pelo nosso site!") {
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch { /* segue */ }
+  const W = 1080, H = 1350;
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const ctx = c.getContext("2d");
+  const titulo1 = "'Baloo 2', 'Trebuchet MS', Arial, sans-serif";
+  ctx.fillStyle = "#173A7A"; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W / 2, 560, 60, W / 2, 560, 620);
+  g.addColorStop(0, "rgba(246,194,48,0.28)"); g.addColorStop(1, "rgba(246,194,48,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 4;
+  [[120, 150, 36], [960, 210, 52], [150, 1040, 44], [950, 1000, 30], [880, 120, 18]].forEach(([x, y, r]) => { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); });
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#F6C230"; ctx.font = `800 76px ${titulo1}`;
+  ctx.fillText(config.nome || "Mimi Dog's Pet Shop", W / 2, 130);
+  ctx.fillStyle = "#FFFFFF"; ctx.font = `700 46px ${titulo1}`;
+  quebrarTexto(ctx, titulo, 900).slice(0, 2).forEach((l, i) => ctx.fillText(l, W / 2, 210 + i * 56));
+  const tam = 680, qx = (W - tam) / 2, qy = 330;
+  ctx.fillStyle = "rgba(0,0,0,0.25)"; retanguloRedondo(ctx, qx + 8, qy + 14, tam, tam, 40); ctx.fill();
+  await desenharQR(ctx, linkDoSite(config), logoDe(config), qx, qy, tam);
+  ctx.fillStyle = "#F6C230"; retanguloRedondo(ctx, 190, 1060, 700, 86, 43); ctx.fill();
+  ctx.fillStyle = "#0F2A5C"; ctx.font = `800 44px ${titulo1}`;
+  ctx.fillText("Aponte a câmera do celular 📷", W / 2, 1118);
+  ctx.fillStyle = "#FFFFFF"; ctx.font = "600 38px Figtree, Arial, sans-serif";
+  if (config.whatsapp) ctx.fillText(`WhatsApp ${fmtTel(config.whatsapp)}`, W / 2, 1210);
+  ctx.fillStyle = "#C9D8F0"; ctx.font = "500 30px Figtree, Arial, sans-serif";
+  ctx.fillText([config.endereco, config.cidade].filter(Boolean).join(" · ").slice(0, 60), W / 2, 1262);
+  ctx.fillStyle = "#F6C230"; ctx.fillRect(0, H - 18, W, 18);
+  return c.toDataURL("image/png");
+}
+
+function dataUrlParaArquivo(dataUrl, nome) {
+  const [cab, dados] = dataUrl.split(",");
+  const tipo = cab.match(/:(.*?);/)[1];
+  const bin = atob(dados);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new File([arr], nome, { type: tipo });
+}
+function baixarDataUrl(dataUrl, nome) {
+  const a = document.createElement("a");
+  a.href = dataUrl; a.download = nome; a.click();
+}
+// No celular abre a tela de compartilhar (WhatsApp, Instagram…); no computador baixa a imagem
+async function compartilharImagem(dataUrl, nome, texto) {
+  try {
+    const arq = dataUrlParaArquivo(dataUrl, nome);
+    if (navigator.canShare && navigator.canShare({ files: [arq] })) {
+      await navigator.share({ files: [arq], text: texto });
+      return "compartilhado";
+    }
+  } catch (e) {
+    if (e && e.name === "AbortError") return "cancelado";
+  }
+  baixarDataUrl(dataUrl, nome);
+  return "baixado";
+}
+
+function QRCodeMimi({ link, logo, tamanho = 220 }) {
+  const ref = useRef(null);
+  const [erro, setErro] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    const c = ref.current;
+    if (!c) return undefined;
+    const escala = 2;
+    c.width = tamanho * escala; c.height = tamanho * escala;
+    const ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, c.width, c.height);
+    desenharQR(ctx, link, logo, 0, 0, c.width).then(() => vivo && setErro(false)).catch(() => vivo && setErro(true));
+    return () => { vivo = false; };
+  }, [link, logo, tamanho]);
+  return (
+    <div className="qr-caixa">
+      <canvas ref={ref} style={{ width: tamanho, height: tamanho }} aria-label={`QR Code para ${link}`} role="img" />
+      {erro && <span className="texto-suave peq">Não consegui desenhar o QR Code.</span>}
+    </div>
+  );
+}
+
+function PainelQRCode({ compacto, salvarLink, avisar }) {
+  const config = useConfig();
+  const link = linkDoSite(config);
+  const [editando, setEditando] = useState(false);
+  const [novoLink, setNovoLink] = useState(config.linkSite || "");
+  const [ocupado, setOcupado] = useState("");
+  const textoDivulgacao = `🐶💙 Agende o banho do seu pet no ${config.nome}! Aponte a câmera para o QR Code ou acesse: ${link}`;
+  const acao = async (tipo) => {
+    setOcupado(tipo);
+    try {
+      if (tipo === "qr") baixarDataUrl(await gerarQRPng(link, logoDe(config)), "qrcode-mimi-dogs.png");
+      if (tipo === "cartao") baixarDataUrl(await gerarCartaoQR(config), "divulgacao-qrcode-mimi-dogs.png");
+      if (tipo === "compartilhar") {
+        const r = await compartilharImagem(await gerarCartaoQR(config), "mimi-dogs-qrcode.png", textoDivulgacao);
+        if (r === "baixado") avisar && avisar("Imagem baixada — é só anexar no WhatsApp ou Instagram");
+      }
+      if (tipo === "copiar") { const ok = await copiarTexto(link); avisar && avisar(ok ? "Link copiado" : "Não consegui copiar", ok ? "ok" : "aviso"); }
+    } catch (e) { avisar && avisar("Não consegui gerar a imagem", "aviso"); }
+    setOcupado("");
+  };
+  return (
+    <div className={`painel-qr ${compacto ? "compacto" : ""}`}>
+      <QRCodeMimi link={link} logo={logoDe(config)} tamanho={compacto ? 150 : 230} />
+      <div className="qr-info">
+        <h3>QR Code do site</h3>
+        <p className="texto-suave peq">Quem apontar a câmera do celular abre o site do pet shop e já pode pedir um horário.</p>
+        <p className="qr-link"><Icone nome="globo" tam={15} /> <span>{link}</span></p>
+        <div className="acoes-topo">
+          <button className="btn btn-ouro btn-peq" disabled={!!ocupado} onClick={() => acao("compartilhar")}><Icone nome="send" tam={15} /> {ocupado === "compartilhar" ? "Gerando…" : "Compartilhar"}</button>
+          <button className="btn btn-leve btn-peq" disabled={!!ocupado} onClick={() => acao("cartao")}><Icone nome="download" tam={15} /> Cartão de divulgação</button>
+          <button className="btn btn-leve btn-peq" disabled={!!ocupado} onClick={() => acao("qr")}><Icone nome="download" tam={15} /> Só o QR Code</button>
+          <button className="btn btn-leve btn-peq" onClick={() => acao("copiar")}><Icone nome="copy" tam={15} /> Copiar link</button>
+        </div>
+        {salvarLink && (
+          editando ? (
+            <div className="linha-add">
+              <input value={novoLink} onChange={(e) => setNovoLink(e.target.value)} placeholder={`${window.location.origin}/`} />
+              <button className="btn btn-ouro btn-peq" onClick={async () => { await salvarLink(novoLink.trim()); setEditando(false); }}>Salvar</button>
+            </div>
+          ) : (
+            <button className="link peq mt10" onClick={() => setEditando(true)}>Usar outro endereço (ex.: domínio próprio)</button>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
 //  CONFIGURAÇÕES
 // =====================================================================
 function FormServico({ inicial, profissionais, aoFechar, aoSalvar }) {
@@ -2980,7 +3214,7 @@ function Configuracoes({ usuario, servicos, profissionais, usuarios, dadosBackup
     try { const d = await comprimirImagem(arq, 300, 0.85); setEmp((x) => ({ ...x, logo: d })); } catch { avisar("Não consegui ler a imagem", "aviso"); }
     e.target.value = "";
   };
-  const ABAS = [["empresa", "Empresa"], ["servicos", "Serviços e preços"], ["profissionais", "Profissionais"], ["pagamentos", "Formas de pagamento"], ["mensagens", "Mensagens automáticas"], ["usuarios", "Usuários e permissões"], ["backup", "Backup"]];
+  const ABAS = [["empresa", "Empresa"], ["qrcode", "QR Code"], ["servicos", "Serviços e preços"], ["profissionais", "Profissionais"], ["pagamentos", "Formas de pagamento"], ["mensagens", "Mensagens automáticas"], ["usuarios", "Usuários e permissões"], ["backup", "Backup"]];
 
   return (
     <div className="pagina">
@@ -3026,6 +3260,13 @@ function Configuracoes({ usuario, servicos, profissionais, usuarios, dadosBackup
           <label className="checar mt10"><input type="checkbox" checked={Boolean(emp.mostrarPrecosSite)} onChange={(e) => setEmp((x) => ({ ...x, mostrarPrecosSite: e.target.checked }))} /> Mostrar preços dos serviços no site</label>
           <Campo rotulo="Aviso em destaque no site (deixe vazio para não mostrar)" largo><textarea rows={2} value={emp.avisoSite} onChange={m("avisoSite")} /></Campo>
           <div className="acoes-fim"><button className="btn btn-ouro" disabled={salvando} onClick={() => salvar({ ...emp, mensagens: undefined, formasPagamento: undefined })}>{salvando ? "Salvando…" : "Salvar dados da empresa"}</button></div>
+        </section>
+      )}
+
+      {aba === "qrcode" && (
+        <section className="painel">
+          <PainelQRCode salvarLink={(l) => salvar({ linkSite: l }, l ? "Endereço do QR Code salvo" : "QR Code voltou para o endereço do site")} avisar={avisar} />
+          <div className="alerta alerta-info mt10"><span>Dicas: imprima o <b>cartão de divulgação</b> e deixe no balcão, cole na vitrine e coloque nos stories. O QR Code aponta sempre para o site; se um dia o endereço mudar, é só ajustar aqui e baixar de novo.</span></div>
         </section>
       )}
 
@@ -3084,7 +3325,7 @@ function Configuracoes({ usuario, servicos, profissionais, usuarios, dadosBackup
 
       {aba === "mensagens" && (
         <section className="painel">
-          <p className="texto-suave peq">Palavras entre chaves são trocadas sozinhas: {"{cliente} {pet} {data} {horario} {servico} {valor} {vencimento} {numero} {itens} {validade} {empresa}"}</p>
+          <p className="texto-suave peq">Palavras entre chaves são trocadas sozinhas: {"{cliente} {pet} {data} {horario} {servico} {valor} {vencimento} {numero} {itens} {validade} {empresa} {site}"}</p>
           {Object.keys(MENSAGENS_PADRAO).map((k) => (
             <Campo key={k} rotulo={NOMES_MENSAGENS[k]} largo>
               <textarea rows={3} value={msgs[k]} onChange={(e) => setMsgs((x) => ({ ...x, [k]: e.target.value }))} />
@@ -3799,6 +4040,7 @@ function Sistema({ usuario }) {
   else if (pagina === "marketing") conteudo = (
     <Marketing campanhas={campanhas} clientes={clientes} pets={pets} agendamentos={agendamentos} novaCampanha={(d) => abrir("campanha", d)}
       editar={(c) => abrir("campanha", c)} enviar={(c) => abrir("enviarCampanha", c)} podeExcluir={podeExcluir}
+      avisar={avisar}
       excluir={(c) => confirmarExclusao("Excluir campanha?", `Apagar a campanha “${c.nome}”?`, async () => { await db.remover("campanhas", c.id); avisar("Campanha excluída"); })} />
   );
   else if (pagina === "relatorios") conteudo = <Relatorios clientes={clientes} pets={pets} agendamentos={agendamentos} contasReceber={contasReceber} contasPagar={contasPagar} profissionais={profissionais} />;
@@ -4969,6 +5211,20 @@ a.site-contato:hover{background:rgba(255,255,255,.07)}
 .site-aviso{background:var(--vermelho);color:#fff;text-align:center;padding:10px 16px;font-weight:700;white-space:pre-wrap}
 .site-horario{margin:6px 0 0;color:#B9CBEA;font-size:14px}
 .site-preco{font-family:var(--fonte-titulo);font-weight:800;color:var(--marinho-3);font-size:18px}
+
+
+/* ---------- QR Code ---------- */
+.painel-qr{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.painel-qr.compacto{gap:16px}
+.qr-caixa{background:#fff;border-radius:18px;padding:6px;box-shadow:0 0 0 3px var(--ouro),var(--sombra);line-height:0}
+.qr-caixa canvas{display:block}
+.qr-info{flex:1 1 280px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.qr-info h3{font-size:20px}
+.qr-info p{margin:0}
+.qr-link{display:flex;align-items:center;gap:6px;color:var(--marinho-3);font-weight:600;font-size:14px;word-break:break-all}
+.qr-campanha{display:flex;gap:14px;align-items:center;background:var(--ceu-2);border-radius:14px;padding:10px 12px;margin:12px 0}
+.qr-campanha .qr-caixa{box-shadow:0 0 0 2px var(--ouro)}
+.qr-campanha > div:last-child{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
 
 /* ---------- responsivo ---------- */
 @media (max-width:1100px){
