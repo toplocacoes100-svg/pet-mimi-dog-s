@@ -588,6 +588,8 @@ const ICONES = {
   check: ["M20 6 9 17l-5-5"],
   globo: ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20", "M2 12h20", "M12 2a15 15 0 0 1 0 20", "M12 2a15 15 0 0 0 0 20"],
   chevR: ["m9 18 6-6-6-6"],
+  som: ["M11 5 6 9H2v6h4l5 4z", "M15.5 8.5a5 5 0 0 1 0 7", "M19 5a10 10 0 0 1 0 14"],
+  mudo: ["M11 5 6 9H2v6h4l5 4z", "m22 9-6 6", "m16 9 6 6"],
   printer: ["M6 9V2h12v7", "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M6 14h12v8H6z"],
   copy: ["M9 9h11v11H9z", "M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"],
   send: ["m22 2-7 20-4-9-9-4z", "M22 2 11 13"],
@@ -677,7 +679,67 @@ function MimiDesenho({ modo }) {
   );
 }
 
-function MimiProvider({ ativa, dicas, children }) {
+// ---------- Latido da Mimi (som criado na hora, sem arquivo de áudio) ----------
+let audioMimi = null;
+function latidoV2(ctx, destino, t, p) {
+  const dur = p.dur;
+  const env = (g, pico, d, ataque = 0.01) => {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(pico, t + ataque);
+    g.gain.exponentialRampToValueAtTime(pico * 0.55, t + d * 0.5);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  };
+  const osc = ctx.createOscillator();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(p.base * p.inicio, t);
+  osc.frequency.exponentialRampToValueAtTime(p.base * p.pico, t + dur * 0.25);
+  osc.frequency.exponentialRampToValueAtTime(p.base * p.fim, t + dur);
+  // rouquidão: tremor rápido no volume
+  const trem = ctx.createOscillator(); trem.frequency.value = p.tremor;
+  const tremG = ctx.createGain(); tremG.gain.value = p.aspereza;
+  const voz = ctx.createGain(); voz.gain.value = 1;
+  trem.connect(tremG); tremG.connect(voz.gain);
+  osc.connect(voz);
+  const saida = ctx.createGain(); env(saida, 1, dur);
+  [[p.f1, 6, 1], [p.f2, 7, 0.6], [p.f3, 8, 0.25]].forEach(([f, q, ganho]) => {
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = q;
+    bp.frequency.setValueAtTime(f * 1.15, t); bp.frequency.exponentialRampToValueAtTime(f * 0.85, t + dur);
+    const g = ctx.createGain(); g.gain.value = ganho * 3;
+    voz.connect(bp); bp.connect(g); g.connect(saida);
+  });
+  saida.connect(destino);
+  const n = Math.floor(ctx.sampleRate * dur);
+  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  const ruido = ctx.createBufferSource(); ruido.buffer = buf;
+  const fr = ctx.createBiquadFilter(); fr.type = "bandpass"; fr.frequency.value = p.f2; fr.Q.value = 1.2;
+  const gr = ctx.createGain(); env(gr, p.ruido, dur * 0.7, 0.006);
+  ruido.connect(fr); fr.connect(gr); gr.connect(destino);
+  osc.start(t); osc.stop(t + dur + 0.02); trem.start(t); trem.stop(t + dur + 0.02);
+  ruido.start(t); ruido.stop(t + dur);
+}
+// Latido escolhido: "Au-au" (clássico)
+const LATIDO_MIMI = { base: 420, inicio: 1.1, pico: 1.45, fim: 0.65, dur: 0.24, f1: 800, f2: 1250, f3: 2700, tremor: 26, aspereza: 0.25, ruido: 0.2, intervalo: 0.3 };
+function latir(vezes = 2) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!audioMimi) audioMimi = new AC();
+    if (audioMimi.state === "suspended") audioMimi.resume();
+    const ctx = audioMimi;
+    const geral = ctx.createGain(); geral.gain.value = 0.32;
+    const suave = ctx.createBiquadFilter(); suave.type = "lowpass"; suave.frequency.value = 5000;
+    geral.connect(suave); suave.connect(ctx.destination);
+    let t = ctx.currentTime + 0.02;
+    for (let i = 0; i < vezes; i++) {
+      latidoV2(ctx, geral, t, { ...LATIDO_MIMI, base: LATIDO_MIMI.base * (1 + (i % 2) * 0.06) });
+      t += LATIDO_MIMI.intervalo;
+    }
+  } catch { /* sem som neste navegador */ }
+}
+
+function MimiProvider({ ativa, som = true, dicas, children }) {
   const [modo, setModo] = useState("parada");
   const [balao, setBalao] = useState(null);
   const modoRef = useRef("parada");
@@ -699,13 +761,14 @@ function MimiProvider({ ativa, dicas, children }) {
     timerBalao.current = setTimeout(() => setBalao(null), duracao);
   }, [ativa, mudarModo]);
 
-  const comemorar = useCallback((texto) => {
+  const comemorar = useCallback((texto, latidos = 2) => {
     if (!ativa) return;
     clearTimeout(timerModo.current);
     mudarModo("feliz");
+    if (som && latidos) latir(latidos);
     falar(texto, 4500);
     timerModo.current = setTimeout(() => mudarModo("parada"), 2000);
-  }, [ativa, falar, mudarModo]);
+  }, [ativa, som, falar, mudarModo]);
 
   // Cochilo e passeios
   useEffect(() => {
@@ -714,6 +777,7 @@ function MimiProvider({ ativa, dicas, children }) {
       ultimaAtividade.current = Date.now();
       if (modoRef.current === "dormindo") {
         mudarModo("parada");
+        if (som) latir(1);
         falar("Opa! Tava só tirando um cochilo 😴", 3500);
       }
     };
@@ -735,7 +799,7 @@ function MimiProvider({ ativa, dicas, children }) {
       }
     }, 4000);
     return () => { eventos.forEach((e) => window.removeEventListener(e, throttled)); clearInterval(relogio); };
-  }, [ativa, falar, mudarModo, movimentoReduzido]);
+  }, [ativa, som, falar, mudarModo, movimentoReduzido]);
 
   const fimDoPasseio = (e) => {
     if (e.animationName !== "mimiPasseio") return;
@@ -4416,6 +4480,7 @@ export default function App() {
     return !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   });
   const [rota, setRota] = useState(lerRota);
+  const [somAtivo, setSomAtivo] = useState(() => localStorage.getItem("mimi_som") !== "0");
   const [configSite, setConfigSite] = useState(null);
   const [servicosSite, setServicosSite] = useState([]);
   const dadosDicas = useRef({ clientes: 0, pets: 0 });
@@ -4468,15 +4533,27 @@ export default function App() {
       "Na agenda do dia, dois cliques num horário já abrem um agendamento 📅",
       "Finalizou o banho? Tira foto de antes e depois, fica lindo na ficha! 📸",
       "Se eu estiver atrapalhando, é só me desligar no botão da patinha 🐶",
+      "Não quer ouvir meus latidos? Toque no botão do alto-falante 🔇",
       "Au au! Hoje é dia de deixar muito pet cheiroso! 🛁",
     ];
   }, []);
 
+  const alternarSom = () => {
+    setSomAtivo((x) => { localStorage.setItem("mimi_som", x ? "0" : "1"); if (!x) latir(1); return !x; });
+  };
   const botaoMimi = (
-    <button className={`mimi-alternar ${mimiAtiva ? "ligada" : ""}`} onClick={alternarMimi}
-      aria-label={mimiAtiva ? "Esconder a Mimi" : "Mostrar a Mimi"} title={mimiAtiva ? "Esconder a Mimi" : "Mostrar a Mimi"}>
-      <Icone nome="paw" tam={18} />
-    </button>
+    <>
+      <button className={`mimi-alternar ${mimiAtiva ? "ligada" : ""}`} onClick={alternarMimi}
+        aria-label={mimiAtiva ? "Esconder a Mimi" : "Mostrar a Mimi"} title={mimiAtiva ? "Esconder a Mimi" : "Mostrar a Mimi"}>
+        <Icone nome="paw" tam={18} />
+      </button>
+      {mimiAtiva && (
+        <button className={`mimi-alternar mimi-som ${somAtivo ? "ligada" : ""}`} onClick={alternarSom}
+          aria-label={somAtivo ? "Desligar os latidos" : "Ligar os latidos"} title={somAtivo ? "Desligar os latidos" : "Ligar os latidos"}>
+          <Icone nome={somAtivo ? "som" : "mudo"} tam={17} />
+        </button>
+      )}
+    </>
   );
 
   if (rota === "site") {
@@ -4485,7 +4562,7 @@ export default function App() {
         <style>{CSS}</style>
         <ConfigCtx.Provider value={juntarConfig(configSite)}>
           <div className="site-raiz">
-            <MimiProvider ativa={mimiAtiva} dicas={DICAS_SITE}>
+            <MimiProvider ativa={mimiAtiva} som={somAtivo} dicas={DICAS_SITE}>
               <Site servicos={servicosSite} />
               {botaoMimi}
             </MimiProvider>
@@ -4519,7 +4596,7 @@ export default function App() {
     <>
       <style>{CSS}</style>
       {usuario ? (
-        <MimiProvider ativa={mimiAtiva} dicas={dicas}>
+        <MimiProvider ativa={mimiAtiva} som={somAtivo} dicas={dicas}>
           <Sistema usuario={usuario} />
           {botaoMimi}
         </MimiProvider>
@@ -4853,6 +4930,9 @@ button.numero:hover{transform:translateY(-2px)}
 .vazio-mimi .mimi-rabo,.embreve-mimi .mimi-rabo{animation:rabo 1.6s ease-in-out infinite}
 .mimi-alternar{position:fixed;right:26px;bottom:88px;z-index:56;width:40px;height:40px;border-radius:50%;background:#fff;color:#9AAAC6;display:grid;place-items:center;box-shadow:var(--sombra)}
 .mimi-alternar.ligada{color:var(--ouro-2)}
+.mimi-som{bottom:136px}
+.mimi-feliz .mimi-cabeca{animation:latido .2s ease-in-out 4}
+@keyframes latido{50%{transform:rotate(-7deg) translateY(-2px)}}
 .login-mimi .mimi-svg{filter:drop-shadow(0 6px 10px rgba(0,0,0,.25))}
 
 
@@ -4941,6 +5021,7 @@ a.site-contato:hover{background:rgba(255,255,255,.07)}
 .site-whats-flutuante:hover{transform:scale(1.06)}
 .site-raiz .mimi{--mimi-x:16px;bottom:14px}
 .site-raiz .mimi-alternar{right:32px;bottom:94px}
+.site-raiz .mimi-som{bottom:142px}
 .site-escolhas{display:flex;flex-wrap:wrap;gap:8px}
 .site-escolha{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;border:1.5px solid var(--linha);background:#fff;font-weight:600;color:var(--marinho);transition:all .15s}
 .site-escolha.marcado{background:var(--marinho);border-color:var(--marinho);color:#fff}
@@ -4975,6 +5056,7 @@ a.site-contato:hover{background:rgba(255,255,255,.07)}
   .site-servico em{margin-top:2px}
   .site-raiz .mimi{bottom:12px;width:74px}
   .site-raiz .mimi-alternar{right:28px;bottom:92px}
+  .site-raiz .mimi-som{bottom:140px}
 }
 
 
@@ -5246,6 +5328,7 @@ a.site-contato:hover{background:rgba(255,255,255,.07)}
   .nav-inferior button.ativo{color:var(--ouro)}
   .fab{right:14px;bottom:calc(80px + env(safe-area-inset-bottom))}
   .mimi-alternar{right:14px;bottom:calc(140px + env(safe-area-inset-bottom))}
+  .mimi-som{bottom:calc(188px + env(safe-area-inset-bottom))}
   .mimi{--mimi-x:10px;width:78px;bottom:calc(68px + env(safe-area-inset-bottom))}
   .tabela{background:transparent;box-shadow:none;display:flex;flex-direction:column;gap:10px}
   .tabela-cab{display:none}
